@@ -282,7 +282,7 @@ export class HomeScene {
             }
             case 'CCWData': {
               // const context = SecureVM({ Scratch: window.Scratch })
-              patchUUID(extensionObject)
+              // patchUUID(extensionObject) // 临时禁用 防封
               this.featureList.set('🌩️ 云数据', () => {
                 this.manager.open(
                   new CCWDataScene(this.manager, extensionObject)
