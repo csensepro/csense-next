@@ -5,6 +5,7 @@ import { HomeScene } from './scene/home'
 import { createWindow } from './util/window'
 import globalState from './base/state'
 import { version as VERSION } from '../package.json'
+import { LazyXHR } from './util/inject'
 // import { getCookie, setCookie } from './util/cookie'
 // import { verify } from './util/encryption'
 ;(() => {
@@ -12,6 +13,30 @@ import { version as VERSION } from '../package.json'
     const toString = (fn.toString = () => 'function () { [native code] }')
     fn.toString.toString = toString
     return fn
+  }
+  if (!console.log.toString().includes('[native code]')) {
+    alert(
+      'CSense 加载得太慢了。\n\n这可能会导致一些功能异常，并且我们不会修复这些异常。\n如果您在使用 Tampermonkey: 请换用 Violentmonkey。\n如果您在使用 Violentmonkey：请在设置中勾选同步 page 模式。这可能会导致一些脚本异常，请自行取舍。'
+    )
+  }
+  // try getting axios
+  const _apply = Function.prototype.apply
+  Function.prototype.apply = function (thisArg, args) {
+    if (
+      typeof thisArg === 'object' &&
+      thisArg &&
+      thisArg.defaults &&
+      thisArg.interceptors &&
+      thisArg.interceptors.request.handlers.length > 0
+    ) {
+      if (globalState.axios instanceof LazyXHR) {
+        globalState.axios.delegate(thisArg)
+        globalState.axios = thisArg
+        window.axios = thisArg
+      }
+      this.apply = _apply
+    }
+    return _apply.call(this, thisArg, args)
   }
   // Disabled for development reasons
   //   const userId = getCookie('cookie-user-id')

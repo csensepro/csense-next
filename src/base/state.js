@@ -1,4 +1,6 @@
 import { Database } from '../api/ccwdata'
+import { LazyXHR } from '../util/inject'
+
 export default {
   userInfo: null,
   myInfo: null,
@@ -15,5 +17,7 @@ export default {
     broadcastBlackList: []
   },
   button: null,
+  /** @type {LazyXHR} */
+  axios: new LazyXHR(),
   isIdentified: false
 }

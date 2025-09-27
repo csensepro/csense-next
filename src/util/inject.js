@@ -43,56 +43,95 @@ function trap(callback) {
 export const vm = globalThis.__CSense_vm_trap ?? new Promise(trap)
 delete globalThis.__CSense_vm_trap
 
-function patchXHR(callback) {
-  const _XMLHttpRequest = window.XMLHttpRequest
-  window.XMLHttpRequest = new Proxy(_XMLHttpRequest, {
-    construct(target, args) {
-      const xhr = new target(...args)
-      let request = null
-      patch(xhr, 'open', _open => {
-        return function (method, url) {
-          if (url === 'https://community-web.ccw.site/base/dateTime') {
-            return _open.call(
-              this,
-              method,
-              `data:application/json,{"body": ${Date.now()}, "code": "200", "msg": null, "status": 200}`
-            )
-          }
-          if (url === 'https://community-web.ccw.site/project/v') {
-            return _open.call(
-              this,
-              method,
-              'data:application/json,{"body": true, "code": "200", "msg": null, "status": 200}'
-            )
-          }
-          if (url.startsWith('https://mustang.xiguacity.cn/')) {
-            return _open.call(this, method, 'data:application/json,{}')
-          }
-          return _open.call(this, method, url)
-        }
-      })
-      patch(xhr, 'send', _send => {
-        return function (data) {
-          request = data
-          return _send.call(this, data)
-        }
-      })
-      xhr.addEventListener('load', () => {
-        if (xhr.responseType === '' || xhr.responseType === 'text') {
-          callback({
-            url: xhr.responseURL,
-            type: xhr.responseType,
-            data: xhr.responseText,
-            request
+// Dummy interceptor receiver for lazy Axios
+export class LazyXHR {
+  constructor() {
+    this.interceptors = {
+      request: {
+        handlers: [],
+        use: (fulfilled, rejected, options) => {
+          this.interceptors.request.handlers.push({
+            fulfilled,
+            rejected,
+            synchronous: false,
+            runWhen: options?.runWhen ?? null
           })
         }
-      })
-      return xhr
+      },
+      response: {
+        handlers: [],
+        use: (fulfilled, rejected, options) => {
+          this.interceptors.response.handlers.push({
+            fulfilled,
+            rejected,
+            synchronous: false,
+            runWhen: options?.runWhen ?? null
+          })
+        }
+      }
     }
-  })
+  }
+  delegate(axiosInstance) {
+    // Migrate interceptors
+    axiosInstance.interceptors.request.handlers.unshift(
+      ...this.interceptors.request.handlers
+    )
+    axiosInstance.interceptors.response.handlers.unshift(
+      ...this.interceptors.response.handlers
+    )
+  }
 }
 
-export const XHR = new EventTarget()
-patchXHR(v => {
-  XHR.dispatchEvent(new CustomEvent('load', { detail: v }))
-})
+// function patchXHR(callback) {
+//   const _XMLHttpRequest = window.XMLHttpRequest
+//   window.XMLHttpRequest = new Proxy(_XMLHttpRequest, {
+//     construct(target, args) {
+//       const xhr = new target(...args)
+//       let request = null
+//       patch(xhr, 'open', _open => {
+//         return function (method, url) {
+//           if (url === 'https://community-web.ccw.site/base/dateTime') {
+//             return _open.call(
+//               this,
+//               method,
+//               `data:application/json,{"body": ${Date.now()}, "code": "200", "msg": null, "status": 200}`
+//             )
+//           }
+//           if (url === 'https://community-web.ccw.site/project/v') {
+//             return _open.call(
+//               this,
+//               method,
+//               'data:application/json,{"body": true, "code": "200", "msg": null, "status": 200}'
+//             )
+//           }
+//           if (url.startsWith('https://mustang.xiguacity.cn/')) {
+//             return _open.call(this, method, 'data:application/json,{}')
+//           }
+//           return _open.call(this, method, url)
+//         }
+//       })
+//       patch(xhr, 'send', _send => {
+//         return function (data) {
+//           request = data
+//           return _send.call(this, data)
+//         }
+//       })
+//       xhr.addEventListener('load', () => {
+//         if (xhr.responseType === '' || xhr.responseType === 'text') {
+//           callback({
+//             url: xhr.responseURL,
+//             type: xhr.responseType,
+//             data: xhr.responseText,
+//             request
+//           })
+//         }
+//       })
+//       return xhr
+//     }
+//   })
+// }
+
+// export const XHR = new EventTarget()
+// patchXHR(v => {
+//   XHR.dispatchEvent(new CustomEvent('load', { detail: v }))
+// })

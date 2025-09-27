@@ -1,26 +1,25 @@
 import globalState from '../base/state'
-import { XHR } from 'src/util/inject'
+import { LazyXHR } from 'src/util/inject'
 
 export class IdentityWarningOverlay {
   constructor(manager) {
     this.manager = manager
     this.showOverlay = false
-    const selfCallback = e => {
-      if (e.detail.url.endsWith('/students/self/detail')) {
-        const json = JSON.parse(e.detail.data)
-        if (json.body) {
-          const { body } = json
+    this.isUpdated = false
+    globalState.axios.interceptors.response.use(resp => {
+      if (resp.config.url.endsWith('/students/self/detail') && this.isUpdated) {
+        const body = resp.data.body
+        if (body) {
           globalState.myInfo = body
           if (body.identitiyAuthRank === 'L2') {
             this.showOverlay = true
             globalState.isIdentified = true
             manager.requestUpdate()
           }
-          XHR.removeEventListener('load', selfCallback)
         }
       }
-    }
-    XHR.addEventListener('load', selfCallback)
+      return resp
+    })
   }
   render() {
     const target = this.manager.target

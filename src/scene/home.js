@@ -1,5 +1,5 @@
 import globalState from '../base/state'
-import { XHR, vm, patch } from 'src/util/inject'
+import { LazyXHR, vm, patch } from 'src/util/inject'
 import { ProjectScene } from './project'
 import { AchievementScene } from './achievement'
 import { EconomyScene } from './economy'
@@ -33,60 +33,69 @@ export class HomeScene {
    */
   constructor(manager) {
     globalState.userInfo = null
-    const selfCallback = e => {
-      if (e.detail.url.endsWith('/students/self/detail')) {
-        const json = JSON.parse(e.detail.data)
-        if (json.body) {
-          const { body } = json
-          if (!this.isProfilePage) {
-            globalState.userInfo = {
-              userId: body.studentNumber,
-              userName: body.name,
-              uuid: body.oid,
-              oid: body.oid,
-              avatar: body.avatar,
-              constellation: -1,
-              following: 0,
-              followers: 0,
-              liked: 0,
-              gender: ['MALE', 'FEMALE'].indexOf(body.gender),
-              pendant: '',
-              reputationScore: body.reputationScore
-            }
-            manager.requestUpdate()
+    globalState.axios.interceptors.response.use(resp => {
+      if (
+        resp.config.url.endsWith('/students/self/detail') &&
+        !globalState.userInfo
+      ) {
+        const body = resp.data.body
+        globalState.myInfo = body
+        if (!this.isProfilePage) {
+          globalState.userInfo = {
+            userId: body.studentNumber,
+            userName: body.name,
+            uuid: body.oid,
+            oid: body.oid,
+            avatar: body.avatar,
+            constellation: -1,
+            following: 0,
+            followers: 0,
+            liked: 0,
+            gender: ['MALE', 'FEMALE'].indexOf(body.gender), // TODO for gandi: non-binary
+            pendant: '',
+            reputationScore: body.reputationScore
           }
-          XHR.removeEventListener('load', selfCallback)
+          manager.requestUpdate()
         }
       }
-    }
-    XHR.addEventListener('load', selfCallback)
+      return resp
+    })
+    // Modify https://community-web.ccw.site/creation/detail
+    globalState.axios.interceptors.response.use(resp => {
+      if (
+        resp.config.url === 'https://community-web.ccw.site/creation/detail'
+      ) {
+        resp.data.body.requireLogin = false
+      }
+      return resp
+    })
     if (window.location.pathname.startsWith('/student/')) {
       this.isProfilePage = true
-      const callback = e => {
-        if (e.detail.url.endsWith('/students/profile')) {
-          const json = JSON.parse(e.detail.data)
-          if (json.body) {
-            const { body } = json
-            globalState.userInfo = {
-              userId: body.studentNumber,
-              userName: body.name,
-              uuid: body.studentOid,
-              oid: body.studentOid,
-              avatar: body.avatar,
-              constellation: -1,
-              following: 0,
-              followers: 0,
-              liked: 0,
-              gender: ['MALE', 'FEMALE'].indexOf(body.gender),
-              pendant: '',
-              reputationScore: body.reputationScore
-            }
-            manager.requestUpdate()
-            XHR.removeEventListener('load', callback)
+      globalState.axios.interceptors.response.use(resp => {
+        if (
+          resp.config.url.endsWith('/students/profile') &&
+          resp.data.body &&
+          !globalState.userInfo
+        ) {
+          const body = resp.data.body
+          globalState.userInfo = {
+            userId: body.studentNumber,
+            userName: body.name,
+            uuid: body.studentOid,
+            oid: body.studentOid,
+            avatar: body.avatar,
+            constellation: -1,
+            following: 0,
+            followers: 0,
+            liked: 0,
+            gender: ['MALE', 'FEMALE'].indexOf(body.gender),
+            pendant: '',
+            reputationScore: body.reputationScore
           }
+          manager.requestUpdate()
         }
-      }
-      XHR.addEventListener('load', callback)
+        return resp
+      })
     } else {
       this.isProfilePage = false
       vm.then(vm => {
