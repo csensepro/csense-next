@@ -63,10 +63,8 @@ import { LazyXHR } from './util/inject'
   //     location.reload()
   //     return
   //   }
-  addStyle(`.csense-window input, textarea !important {
-  font-family: unset;
-}`)
   const content = document.createElement('div')
+  content.style.fontFamily = 'unset'
   const manager = new SceneManager(content)
   manager.addOverlay(new IdentityWarningOverlay(manager))
   manager.open(new HomeScene(manager))
@@ -78,6 +76,7 @@ import { LazyXHR } from './util/inject'
   manager._updateTitle()
   globalThis.manager = manager
   // Anti-detection designed for "some" tricky projects
+  // NOTE: 以下为最基本的防护，无法避免通过 documentElement 等方式获取到 CSense 的存在，此时可以考虑安装插件。
   const querySelectorAll = Document.prototype.querySelectorAll
   Document.prototype.querySelectorAll = asNativeFunc(function (selectors) {
     if (this !== document) {

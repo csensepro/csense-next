@@ -15,9 +15,21 @@ import { Monaco } from 'src/base/monaco'
 import { ExtensionOverlay } from 'src/overlay/extension'
 import { vm as SecureVM } from 'secure-vm'
 import withResolvers from 'src/util/withResolvers'
+import { PluginScene } from './plugin'
 
 export class HomeScene {
   static title = '主页'
+  // 添加新 entry 时请往这里写东西
+  static featureListOrder = [
+    '📝 作品数据',
+    '🌩️ 云数据',
+    '🎮 MMO 框架',
+    '🏆 成就相关功能',
+    '📜 经济合约',
+    '⚙️ 高级',
+    '🛠️ 插件',
+    'ℹ️ 关于'
+  ]
   /**
    * @param {Set<[string, Function]>} featureList
    * @param {string[]} order
@@ -32,6 +44,7 @@ export class HomeScene {
    * @param {import('../base/scene').SceneManager} manager
    */
   constructor(manager) {
+    this.plugin = new PluginScene(manager)
     globalState.userInfo = null
     globalState.axios.interceptors.response.use(resp => {
       if (
@@ -128,6 +141,12 @@ export class HomeScene {
                 projectJson = JSON.parse(content)
               }
             }
+            // Waiting for plugins to load
+            globalState.button.style.filter = 'invert(1) hue-rotate(180deg)'
+            globalState.button.title = 'CSense 正在加载插件。'
+            await globalState.pluginPromise
+            globalState.button.style.filter = 'none'
+            globalState.button.title = 'CCW 脆弱性的根本证明。'
             if (projectJson.extensions && projectJson.extensions.length > 0) {
               // Detected extensions.
               /** @type {PromiseWithResolvers<import('jszip')>} */
@@ -208,277 +227,262 @@ export class HomeScene {
             }
           }
         )
-        vm.runtime.compilerRegisterExtension = (name, extensionObject) => {
-          switch (name) {
-            case 'community': {
-              extensionObject.getCoinCount = () => Infinity
-              extensionObject.isUserLikedOtherProject =
-                extensionObject.isLiked =
-                extensionObject.isMyFans =
-                extensionObject.isFanOfSomeone =
-                extensionObject.requestFollow =
-                extensionObject.isUserFavoriteOtherProject =
-                  () => true
-              const _insertCoinAndWaitForResult =
-                extensionObject.insertCoinAndWaitForResult
-              extensionObject.insertCoinAndWaitForResult = function (args) {
-                if (confirm(`作品请求投 ${args.COUNT} 个币，是否伪造结果？`)) {
-                  return true
-                }
-                return _insertCoinAndWaitForResult.call(this, args)
-              }
-              break
+        globalState.extensionInjector.on('community', extensionObject => {
+          extensionObject.getCoinCount = () => Infinity
+          extensionObject.isUserLikedOtherProject =
+            extensionObject.isLiked =
+            extensionObject.isMyFans =
+            extensionObject.isFanOfSomeone =
+            extensionObject.requestFollow =
+            extensionObject.isUserFavoriteOtherProject =
+              () => true
+          const _insertCoinAndWaitForResult =
+            extensionObject.insertCoinAndWaitForResult
+          extensionObject.insertCoinAndWaitForResult = function (args) {
+            if (confirm(`作品请求投 ${args.COUNT} 个币，是否伪造结果？`)) {
+              return true
             }
-            case 'GandiAchievementAndLeaderboard': {
-              this.featureList.set('🏆 成就相关功能', () => {
-                this.manager.open(
-                  new AchievementScene(this.manager, extensionObject)
-                )
-              })
-              this.manager.requestUpdate()
-              break
-            }
-            case 'GandiEconomy': {
-              patch(extensionObject, 'requestFundReturn', requestFundReturn => {
-                return function (args) {
-                  const res = prompt(
-                    '作品正在请求合约无偿注资。请输入伪造的注资金额。\n当不输入任何内容时，将自动回落到官方实现。'
-                  )
-                  if (res === null || res === '') {
-                    return requestFundReturn.call(this, args)
-                  }
-                  const v = Number(res)
-                  if (Number.isNaN(v) || v < 0) {
-                    return 0
-                  }
-                  return v
-                }
-              })
-              this.featureList.set('📜 经济合约', () => {
-                this.manager.open(
-                  new EconomyScene(this.manager, extensionObject)
-                )
-              })
-              break
-            }
-            case 'CCWMMO': {
-              patchUUID(extensionObject)
-              extensionObject.dispatchNewMessageWithParams = function (
-                _,
-                util
-              ) {
-                const blackList = globalState.mmo.broadcastBlackList
-                const hatParam = util.thread.hatParam
-                const message = `${hatParam.type}(session=${JSON.stringify(hatParam.sender)},uuid=${JSON.stringify(hatParam.senderUID)},name=${JSON.stringify(hatParam.name)},content=${JSON.stringify(hatParam.content)})`
-                if (blackList.some(regex => regex.test(message))) {
-                  return false
-                }
-                return true
-              }
-              this.featureList.set('🎮 MMO 框架', () => {
-                this.manager.open(new MMOScene(this.manager, extensionObject))
-              })
-              break
-            }
-            case 'CCWData': {
-              // const context = SecureVM({ Scratch: window.Scratch })
-              // patchUUID(extensionObject) // 临时禁用 防封
-              this.featureList.set('🌩️ 云数据', () => {
-                this.manager.open(
-                  new CCWDataScene(this.manager, extensionObject)
-                )
-              })
-              extensionObject.sendPlayEventCode = () => {}
-              // FIXME: SecureVM is slow
-              // const context = SecureVM()
-              // patch(extensionObject, 'getValueInJSON', getValueInJSON => {
-              //   return function getValueInJSON(args) {
-              //     var key = Scratch.Cast.toString(args.KEY),
-              //       json = Scratch.Cast.toString(args.JSON),
-              //       jsonObj
-              //     try {
-              //       jsonObj = JSON.parse(json)
-              //     } catch (e) {
-              //       return 'error: '.concat(e.message)
-              //     }
-              //     if (/[()=]/gm.test(key))
-              //       return 'error: invalid key '.concat(
-              //         key,
-              //         ', cannot contain ()='
-              //       )
-              //     var key2 = 'jsonObj['.concat(key, ']'),
-              //       rtObj
-              //     Array.isArray(jsonObj)
-              //       ? (key = key.startsWith('[')
-              //           ? 'jsonObj'.concat(key)
-              //           : 'jsonObj['.concat(key, ']'))
-              //       : /\s/gm.test(key)
-              //         ? (console.warn(
-              //             '[CCW Data] warning: invalid key '.concat(
-              //               key,
-              //               ', space and dot cannot be used together'
-              //             )
-              //           ),
-              //           (key = 'jsonObj["'.concat(key, '"]')))
-              //         : (key = 'jsonObj.'.concat(key))
-              //     try {
-              //       rtObj = context
-              //         .Function('key', 'json', 'jsonObj', 'key2', 'args', key)
-              //         .call(
-              //           this,
-              //           key,
-              //           json,
-              //           jsonObj,
-              //           key2,
-              //           `return eval(${JSON.stringify(args)})`
-              //         )
-              //     } catch (e) {
-              //       try {
-              //         rtObj = context
-              //           .Function('key', 'json', 'jsonObj', 'key2', 'args', key)
-              //           .call(
-              //             this,
-              //             key,
-              //             json,
-              //             jsonObj,
-              //             key2,
-              //             `return eval(${JSON.stringify(args)})`
-              //           )
-              //       } catch (e) {
-              //         return 'error: key or expression invalid'
-              //       }
-              //     }
-              //     return 'object' === typeof rtObj
-              //       ? JSON.stringify(rtObj)
-              //       : rtObj
-              //   }
-              // })
-              // patch(extensionObject, 'setValueInJSON', setValueInJSON => {
-              //   return function setValueInJSON(args) {
-              //     var key = Scratch.Cast.toString(args.KEY),
-              //       value = Scratch.Cast.toString(args.VALUE),
-              //       json = Scratch.Cast.toString(args.JSON),
-              //       jsonObj
-              //     try {
-              //       jsonObj = JSON.parse(json)
-              //     } catch (e) {
-              //       return 'error: '.concat(e.message)
-              //     }
-              //     if (/[()=]/gm.test(key))
-              //       return 'error: invalid key '.concat(
-              //         key,
-              //         ', cannot contain ()='
-              //       )
-              //     var valueObj = value
-              //     if (
-              //       /^[\[].*?[\]]$/gm.test(value) ||
-              //       /^[\{].*?[\}]$/gm.test(value)
-              //     )
-              //       try {
-              //         valueObj = JSON.parse(value)
-              //       } catch (e) {}
-              //     'string' == typeof valueObj &&
-              //       /^-?\d*\.?\d*$/gm.test(valueObj) &&
-              //       (valueObj = Number(valueObj))
-              //     try {
-              //       Array.isArray(jsonObj)
-              //         ? (jsonObj[key] = valueObj)
-              //         : /[\.\[\]]/gm.test(key)
-              //           ? (valueObj instanceof Object
-              //               ? ((valueObj = JSON.stringify(valueObj)),
-              //                 (valueObj = "JSON.parse('".concat(
-              //                   valueObj,
-              //                   "')"
-              //                 )))
-              //               : 'string' == typeof valueObj &&
-              //                 (valueObj = "'".concat(valueObj, "'")),
-              //             context
-              //               .Function(
-              //                 'key',
-              //                 'value',
-              //                 'json',
-              //                 'jsonObj',
-              //                 'valueObj',
-              //                 'args',
-              //                 'jsonObj.'.concat(key, '=').concat(valueObj)
-              //               )
-              //               .call(
-              //                 this,
-              //                 key,
-              //                 value,
-              //                 json,
-              //                 jsonObj,
-              //                 valueObj,
-              //                 args
-              //               ))
-              //           : (jsonObj[key] = valueObj)
-              //     } catch (e) {
-              //       return 'error: key or expression invalid'
-              //     }
-              //     return JSON.stringify(jsonObj)
-              //   }
-              // })
-              patch(
-                extensionObject,
-                '_getValueFromProject',
-                _getValueFromProject => {
-                  return async function (name) {
-                    const newValue = await _getValueFromProject.call(this, name)
-                    globalState.ccwdata.project.set(name, newValue)
-                    const possiblyModifiedValue =
-                      globalState.ccwdata.project.get(name)
-                    if (possiblyModifiedValue !== newValue) {
-                      return extensionObject._setValueToProject(
-                        name,
-                        possiblyModifiedValue
-                      )
-                    }
-                    return possiblyModifiedValue
-                  }
-                }
-              )
-              patch(
-                extensionObject,
-                '_setValueToProject',
-                _setValueToProject => {
-                  return async function (name, value) {
-                    globalState.ccwdata.project.set(name, value)
-                    return await _setValueToProject.call(
-                      this,
-                      name,
-                      globalState.ccwdata.project.get(name)
-                    )
-                  }
-                }
-              )
-              patch(extensionObject, '_getValueFromUser', _getValueFromUser => {
-                return async function (name) {
-                  const newValue = await _getValueFromUser.call(this, name)
-                  globalState.ccwdata.user.set(name, newValue)
-                  const possiblyModifiedValue =
-                    globalState.ccwdata.user.get(name)
-                  if (possiblyModifiedValue !== newValue) {
-                    return extensionObject._setValueToUser(
-                      name,
-                      possiblyModifiedValue
-                    )
-                  }
-                  return possiblyModifiedValue
-                }
-              })
-              patch(extensionObject, '_setValueToUser', _setValueToUser => {
-                return async function (name, value) {
-                  globalState.ccwdata.user.set(name, value)
-                  return await _setValueToUser.call(
-                    this,
-                    name,
-                    globalState.ccwdata.user.get(name)
-                  )
-                }
-              })
-              break
-            }
+            return _insertCoinAndWaitForResult.call(this, args)
           }
+        })
+        globalState.extensionInjector.on(
+          'GandiAchievementAndLeaderboard',
+          extensionObject => {
+            this.featureList.set('🏆 成就相关功能', () => {
+              this.manager.open(
+                new AchievementScene(this.manager, extensionObject)
+              )
+            })
+            this.manager.requestUpdate()
+          }
+        )
+        globalState.extensionInjector.on('GandiEconomy', extensionObject => {
+          patch(extensionObject, 'requestFundReturn', requestFundReturn => {
+            return function (args) {
+              const res = prompt(
+                '作品正在请求合约无偿注资。请输入伪造的注资金额。\n当不输入任何内容时，将自动回落到官方实现。'
+              )
+              if (res === null || res === '') {
+                return requestFundReturn.call(this, args)
+              }
+              const v = Number(res)
+              if (Number.isNaN(v) || v < 0) {
+                return 0
+              }
+              return v
+            }
+          })
+          this.featureList.set('📜 经济合约', () => {
+            this.manager.open(new EconomyScene(this.manager, extensionObject))
+          })
+        })
+        globalState.extensionInjector.on('CCWMMO', extensionObject => {
+          patchUUID(extensionObject)
+          extensionObject.dispatchNewMessageWithParams = function (_, util) {
+            const blackList = globalState.mmo.broadcastBlackList
+            const hatParam = util.thread.hatParam
+            const message = `${hatParam.type}(session=${JSON.stringify(hatParam.sender)},uuid=${JSON.stringify(hatParam.senderUID)},name=${JSON.stringify(hatParam.name)},content=${JSON.stringify(hatParam.content)})`
+            if (blackList.some(regex => regex.test(message))) {
+              return false
+            }
+            return true
+          }
+          this.featureList.set('🎮 MMO 框架', () => {
+            this.manager.open(new MMOScene(this.manager, extensionObject))
+          })
+        })
+        globalState.extensionInjector.on('CCWData', extensionObject => {
+          // const context = SecureVM({ Scratch: window.Scratch })
+          // patchUUID(extensionObject) // 临时禁用 防封
+          this.featureList.set('🌩️ 云数据', () => {
+            this.manager.open(new CCWDataScene(this.manager, extensionObject))
+          })
+          extensionObject.sendPlayEventCode = () => {}
+          // FIXME: SecureVM is slow
+          // const context = SecureVM()
+          // patch(extensionObject, 'getValueInJSON', getValueInJSON => {
+          //   return function getValueInJSON(args) {
+          //     var key = Scratch.Cast.toString(args.KEY),
+          //       json = Scratch.Cast.toString(args.JSON),
+          //       jsonObj
+          //     try {
+          //       jsonObj = JSON.parse(json)
+          //     } catch (e) {
+          //       return 'error: '.concat(e.message)
+          //     }
+          //     if (/[()=]/gm.test(key))
+          //       return 'error: invalid key '.concat(
+          //         key,
+          //         ', cannot contain ()='
+          //       )
+          //     var key2 = 'jsonObj['.concat(key, ']'),
+          //       rtObj
+          //     Array.isArray(jsonObj)
+          //       ? (key = key.startsWith('[')
+          //           ? 'jsonObj'.concat(key)
+          //           : 'jsonObj['.concat(key, ']'))
+          //       : /\s/gm.test(key)
+          //         ? (console.warn(
+          //             '[CCW Data] warning: invalid key '.concat(
+          //               key,
+          //               ', space and dot cannot be used together'
+          //             )
+          //           ),
+          //           (key = 'jsonObj["'.concat(key, '"]')))
+          //         : (key = 'jsonObj.'.concat(key))
+          //     try {
+          //       rtObj = context
+          //         .Function('key', 'json', 'jsonObj', 'key2', 'args', key)
+          //         .call(
+          //           this,
+          //           key,
+          //           json,
+          //           jsonObj,
+          //           key2,
+          //           `return eval(${JSON.stringify(args)})`
+          //         )
+          //     } catch (e) {
+          //       try {
+          //         rtObj = context
+          //           .Function('key', 'json', 'jsonObj', 'key2', 'args', key)
+          //           .call(
+          //             this,
+          //             key,
+          //             json,
+          //             jsonObj,
+          //             key2,
+          //             `return eval(${JSON.stringify(args)})`
+          //           )
+          //       } catch (e) {
+          //         return 'error: key or expression invalid'
+          //       }
+          //     }
+          //     return 'object' === typeof rtObj
+          //       ? JSON.stringify(rtObj)
+          //       : rtObj
+          //   }
+          // })
+          // patch(extensionObject, 'setValueInJSON', setValueInJSON => {
+          //   return function setValueInJSON(args) {
+          //     var key = Scratch.Cast.toString(args.KEY),
+          //       value = Scratch.Cast.toString(args.VALUE),
+          //       json = Scratch.Cast.toString(args.JSON),
+          //       jsonObj
+          //     try {
+          //       jsonObj = JSON.parse(json)
+          //     } catch (e) {
+          //       return 'error: '.concat(e.message)
+          //     }
+          //     if (/[()=]/gm.test(key))
+          //       return 'error: invalid key '.concat(
+          //         key,
+          //         ', cannot contain ()='
+          //       )
+          //     var valueObj = value
+          //     if (
+          //       /^[\[].*?[\]]$/gm.test(value) ||
+          //       /^[\{].*?[\}]$/gm.test(value)
+          //     )
+          //       try {
+          //         valueObj = JSON.parse(value)
+          //       } catch (e) {}
+          //     'string' == typeof valueObj &&
+          //       /^-?\d*\.?\d*$/gm.test(valueObj) &&
+          //       (valueObj = Number(valueObj))
+          //     try {
+          //       Array.isArray(jsonObj)
+          //         ? (jsonObj[key] = valueObj)
+          //         : /[\.\[\]]/gm.test(key)
+          //           ? (valueObj instanceof Object
+          //               ? ((valueObj = JSON.stringify(valueObj)),
+          //                 (valueObj = "JSON.parse('".concat(
+          //                   valueObj,
+          //                   "')"
+          //                 )))
+          //               : 'string' == typeof valueObj &&
+          //                 (valueObj = "'".concat(valueObj, "'")),
+          //             context
+          //               .Function(
+          //                 'key',
+          //                 'value',
+          //                 'json',
+          //                 'jsonObj',
+          //                 'valueObj',
+          //                 'args',
+          //                 'jsonObj.'.concat(key, '=').concat(valueObj)
+          //               )
+          //               .call(
+          //                 this,
+          //                 key,
+          //                 value,
+          //                 json,
+          //                 jsonObj,
+          //                 valueObj,
+          //                 args
+          //               ))
+          //           : (jsonObj[key] = valueObj)
+          //     } catch (e) {
+          //       return 'error: key or expression invalid'
+          //     }
+          //     return JSON.stringify(jsonObj)
+          //   }
+          // })
+          patch(
+            extensionObject,
+            '_getValueFromProject',
+            _getValueFromProject => {
+              return async function (name) {
+                const newValue = await _getValueFromProject.call(this, name)
+                globalState.ccwdata.project.set(name, newValue)
+                const possiblyModifiedValue =
+                  globalState.ccwdata.project.get(name)
+                if (possiblyModifiedValue !== newValue) {
+                  return extensionObject._setValueToProject(
+                    name,
+                    possiblyModifiedValue
+                  )
+                }
+                return possiblyModifiedValue
+              }
+            }
+          )
+          patch(extensionObject, '_setValueToProject', _setValueToProject => {
+            return async function (name, value) {
+              globalState.ccwdata.project.set(name, value)
+              return await _setValueToProject.call(
+                this,
+                name,
+                globalState.ccwdata.project.get(name)
+              )
+            }
+          })
+          patch(extensionObject, '_getValueFromUser', _getValueFromUser => {
+            return async function (name) {
+              const newValue = await _getValueFromUser.call(this, name)
+              globalState.ccwdata.user.set(name, newValue)
+              const possiblyModifiedValue = globalState.ccwdata.user.get(name)
+              if (possiblyModifiedValue !== newValue) {
+                return extensionObject._setValueToUser(
+                  name,
+                  possiblyModifiedValue
+                )
+              }
+              return possiblyModifiedValue
+            }
+          })
+          patch(extensionObject, '_setValueToUser', _setValueToUser => {
+            return async function (name, value) {
+              globalState.ccwdata.user.set(name, value)
+              return await _setValueToUser.call(
+                this,
+                name,
+                globalState.ccwdata.user.get(name)
+              )
+            }
+          })
+        })
+        vm.runtime.compilerRegisterExtension = (name, extensionObject) => {
+          globalState.extensionInjector.emit(name, extensionObject)
           _compilerRegisterExtension.call(vm.runtime, name, extensionObject)
         }
       })
@@ -491,6 +495,12 @@ export class HomeScene {
         '⚙️ 高级',
         () => {
           this.manager.open(new ScriptScene(this.manager))
+        }
+      ],
+      [
+        '🛠️ 插件',
+        () => {
+          this.manager.open(this.plugin)
         }
       ],
       [
@@ -526,15 +536,10 @@ export class HomeScene {
 
   renderFeatureList() {
     const ul = document.createElement('ul')
-    const features = HomeScene.orderBy(this.featureList, [
-      '📝 作品数据',
-      '🌩️ 云数据',
-      '🎮 MMO 框架',
-      '🏆 成就相关功能',
-      '📜 经济合约',
-      '⚙️ 高级',
-      'ℹ️ 关于'
-    ])
+    const features = HomeScene.orderBy(
+      this.featureList,
+      HomeScene.featureListOrder
+    )
 
     features.forEach(feature => {
       ul.appendChild(HomeScene.createListButton(feature[0], feature[1]))
