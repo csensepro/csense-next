@@ -93,4 +93,15 @@ import { LazyXHR } from './util/inject'
       }
     })
   })
+  const querySelector = Document.prototype.querySelector
+  Document.prototype.querySelector = asNativeFunc(function (selectors) {
+    if (this !== document) {
+      return querySelector.call(this, selectors)
+    }
+    const res = querySelector.call(this, selectors)
+    if (res === win.button || res === win.window) {
+      return null
+    }
+    return res
+  })
 })()
