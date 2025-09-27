@@ -60,6 +60,8 @@ export function createWindow(element, onClose) {
       } else {
         reopenButton.style.display = 'none'
         floatingDiv.style.display = 'block'
+        floatingDiv.style.top = reopenButton.style.top
+        floatingDiv.style.left = reopenButton.style.left
         floatingDiv.animate([{ opacity: '0' }, { opacity: '1' }], {
           duration: 300,
           easing: 'ease-in-out'

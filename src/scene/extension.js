@@ -117,6 +117,14 @@ export class ExtensionScene {
     if (this.overlay.projectJson.gandi?.wildExtensions) {
       this.overlay.projectJson.gandi.wildExtensions = {}
     }
+    // Fuck you Gandi
+    const _clearLoadedExtensions =
+      globalState.vm.extensionManager.clearLoadedExtensions
+    globalState.vm.extensionManager.clearLoadedExtensions = function () {
+      // Prevent call for once
+      globalState.vm.extensionManager.clearLoadedExtensions =
+        _clearLoadedExtensions
+    }
     this.overlay.projectJson.extensions = []
     this.overlay.projectJson.extensionURLs = {}
     this.overlay.input = this.overlay.input.file(
