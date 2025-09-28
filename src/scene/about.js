@@ -48,7 +48,7 @@ export class AboutScene {
     container.appendChild(this.pSmall('请勿将此工具用于非法用途。'))
     container.appendChild(
       this.pSmall(
-        '此工具的源代码位于 https://github.com/csense-rev/csense-rev。'
+        '此工具的源代码位于 https://github.com/csensepro/csense-next。'
       )
     )
 
