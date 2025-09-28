@@ -1,10 +1,21 @@
-# CSense
+# CSense Next
 
 > 一个 **开源的** CCW 安全审计工具。
+>
+> **移除了**原版 CSense 的使用限制
 
 ## 使用
 
-请自行编译。我不喜欢脚本小子和伸手党。
+1. 安装 暴力猴 或 脚本猫 浏览器拓展（自行搜索）
+2. 前往 [https://greasyfork.org/zh-CN/scripts/550966-csense](https://greasyfork.org/zh-CN/scripts/550966-csense) 安装此脚本
+
+## 免责声明
+
+本插件仅供研究学习使用，请勿用于非法或违规用途。
+
+使用本插件造成的任何问题，FurryR 和 CSense Next 团队不负任何责任，一切后果由使用者自行承担。
+
+# 原版 README
 
 ## FAQ 是真的么？
 
